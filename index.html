@@ -171,7 +171,7 @@ function caricaBackup(input) {
       document.getElementById('import-info').textContent = 'Aggiornato al ' + ts;
       document.getElementById('schermata-carica').style.display = 'none';
       document.getElementById('app').style.display = 'block';
-      localStorage.setItem('vernice_mobile_dati', e.target.result);
+      salvaDB(e.target.result).catch(err => console.warn('Salvataggio fallito:', err));
       pagina = 0;
       aggiorna();
     } catch(err) {
@@ -374,9 +374,42 @@ function cambiaPag(dir) {
   window.scrollTo(0, 0);
 }
 
-// Carica dati salvati
-const saved = localStorage.getItem('vernice_mobile_dati');
-if (saved) {
+// IndexedDB per storage senza limiti
+const DB_NAME = 'vernice_mobile';
+const DB_STORE = 'backup';
+
+function apriDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
+    req.onsuccess = e => res(e.target.result);
+    req.onerror = e => rej(e.target.error);
+  });
+}
+
+async function salvaDB(data) {
+  const db = await apriDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).put(data, 'backup');
+    tx.oncomplete = res;
+    tx.onerror = e => rej(e.target.error);
+  });
+}
+
+async function leggiDB() {
+  const db = await apriDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(DB_STORE, 'readonly');
+    const req = tx.objectStore(DB_STORE).get('backup');
+    req.onsuccess = e => res(e.target.result);
+    req.onerror = e => rej(e.target.error);
+  });
+}
+
+// Carica dati salvati all'avvio
+leggiDB().then(saved => {
+  if (!saved) return;
   try {
     const json = JSON.parse(saved);
     dati = json.dati || [];
@@ -386,7 +419,7 @@ if (saved) {
     document.getElementById('app').style.display = 'block';
     aggiorna();
   } catch(e) {}
-}
+}).catch(() => {});
 </script>
 </body>
 </html>
